@@ -1,0 +1,12 @@
+build_order.md
+product_manifest.md
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+*.log
+.DS_Store
+.vscode/
+.idea/
