@@ -6,7 +6,7 @@ Tanna is a system designed to insert structure into informal commerce without tu
 
 > **Note:** This project is currently **Private** and intended for commercial launch.
 
-## 🚀 The Problem
+##  The Problem
 
 Millions of vendors sell via WhatsApp/Instagram. Their workflow is broken:
 - Payments arrive with no context.
@@ -16,13 +16,13 @@ Millions of vendors sell via WhatsApp/Instagram. Their workflow is broken:
 
 **Tanna is not a marketplace. It is not a website builder. It is a payment-confirmed product page and notification system.**
 
-## ✨ Core Principles
+##  Core Principles
 
 1.  **Informal by Nature, Structured by Design**: Respects how vendors sell in DMs.
 2.  **Boring Is Trustworthy**: No hype, no complex animations. Clear text beats clever design.
 3.  **One Job, Done Well**: Every feature must improve payment clarity and trust.
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 This project is a monorepo containing both the frontend and backend.
 
@@ -45,7 +45,7 @@ This project is a monorepo containing both the frontend and backend.
     - Webhook handling for indisputable payment truth.
     - Idempotency enforcement.
 
-## 📦 Project Structure
+##  Project Structure
 
 ```
 Tanna/
@@ -65,7 +65,7 @@ Tanna/
 └── product_manifest.md # The Single Source of Truth for the project
 ```
 
-## 🏃‍♂️ Getting Started
+##  Getting Started
 
 ### Prerequisites
 - Node.js (v18+)
@@ -99,6 +99,6 @@ Tanna/
     npm run dev
     ```
 
-## 🔒 License
+##  License
 
 Proprietary. All rights reserved.
