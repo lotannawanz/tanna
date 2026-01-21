@@ -61,8 +61,6 @@ Tanna/
 │   │   ├── components/
 │   │   └── pages/
 │   └── public/
-│
-└── product_manifest.md # The Single Source of Truth for the project
 ```
 
 ##  Getting Started
