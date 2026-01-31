@@ -33,6 +33,9 @@ const envSchema = z.object({
     WHATSAPP_API_TOKEN: z.string().optional(),
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().optional(),
+
+    // Auth (Epic 1)
+    JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
 });
 
 /**

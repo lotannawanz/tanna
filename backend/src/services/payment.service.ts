@@ -25,6 +25,7 @@ export interface CreatePaymentIntentInput {
 }
 
 export interface PaymentIntentResult {
+    paymentId: string;
     internalRef: string;
     paystackRef: string;
     authorizationUrl: string;
@@ -122,6 +123,7 @@ export async function createPaymentIntent(
     }, 'Payment intent created');
 
     return {
+        paymentId: payment.id,
         internalRef: payment.internalRef,
         paystackRef: paystackResponse.data.reference,
         authorizationUrl: paystackResponse.data.authorization_url,
@@ -137,11 +139,18 @@ export async function createPaymentIntent(
  * 
  * This is the ONLY way to confirm a payment.
  * Redirects DO NOT confirm payments.
+ * 
+ * Epic 5: Also updates linked Order status:
+ * - Payment CONFIRMED -> Order CONFIRMED
+ * - Payment FAILED -> Order CANCELLED
  */
 export async function processPaystackPaymentEvent(
     prisma: PrismaClient,
     event: PaystackWebhookEvent
 ): Promise<PaymentVerificationResult> {
+    // Dynamic import to avoid circular dependency
+    const { confirmOrder, cancelOrder, getOrderByPaymentId } = await import('./order.service.js');
+
     const reference = event.data.reference;
 
     // Find payment by Paystack reference
@@ -226,6 +235,39 @@ export async function processPaystackPaymentEvent(
             });
         }
 
+        // EPIC 5: Update linked Order status
+        // This is the ONLY place where order status changes due to payment
+        const linkedOrder = await getOrderByPaymentId(prisma, payment.id);
+
+        if (linkedOrder) {
+            try {
+                if (newStatus === PaymentStatus.CONFIRMED) {
+                    await confirmOrder(prisma, linkedOrder.id);
+                    logger.info({
+                        orderId: linkedOrder.id,
+                        paymentId: payment.id,
+                    }, 'Order confirmed via webhook');
+                } else {
+                    await cancelOrder(prisma, linkedOrder.id);
+                    logger.info({
+                        orderId: linkedOrder.id,
+                        paymentId: payment.id,
+                    }, 'Order cancelled via webhook');
+                }
+            } catch (orderError) {
+                // Order transition might fail if already in terminal state (idempotent)
+                logger.warn({
+                    orderId: linkedOrder.id,
+                    error: orderError instanceof Error ? orderError.message : 'Unknown error',
+                }, 'Order status transition skipped (likely already processed)');
+            }
+        } else {
+            // No linked order - this is a legacy payment or standalone payment
+            logger.info({
+                paymentId: payment.id,
+            }, 'No linked order found for payment');
+        }
+
         // Emit domain event (no side effects yet)
         await emitPaymentEvent({
             type: newStatus === PaymentStatus.CONFIRMED ? 'PAYMENT_CONFIRMED' : 'PAYMENT_FAILED',
@@ -268,6 +310,7 @@ export async function processPaystackPaymentEvent(
 
 /**
  * Get payment by internal reference or Paystack reference
+ * Returns full order context for confirmation page
  */
 export async function getPaymentByReference(
     prisma: PrismaClient,
@@ -289,6 +332,18 @@ export async function getPaymentByReference(
             currency: true,
             failureReason: true,
             createdAt: true,
+            verifiedAt: true,
+            order: {
+                select: {
+                    id: true,
+                    vendorId: true,
+                    status: true,
+                    totalAmountKobo: true,
+                    buyerPhone: true,
+                    createdAt: true,
+                    confirmedAt: true,
+                },
+            },
         },
     });
 }

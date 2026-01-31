@@ -15,12 +15,14 @@ datasource db {
 // ===================
 // Authenticated users who sell products
 model Vendor {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  phone        String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
   
-  stores    Store[]
+  store        Store?   // 1:1 relationship
 
   @@map("vendors")
 }
@@ -30,18 +32,27 @@ model Vendor {
 // ===================
 // Public-facing storefronts owned by vendors
 model Store {
-  id        String   @id @default(uuid())
-  vendorId  String   @map("vendor_id")
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                   String      @id @default(uuid())
+  vendorId             String      @unique @map("vendor_id")  // Enforces 1:1
+  name                 String
+  slug                 String      @unique
+  status               StoreStatus @default(ACTIVE)
+  currency             String      @default("NGN")
+  deliveryEstimateText String?     @map("delivery_estimate_text")
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
   
   vendor    Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   products  Product[]
 
-  @@index([vendorId])
+  @@index([status])
   @@map("stores")
+}
+
+// Store status enum
+enum StoreStatus {
+  ACTIVE
+  PAUSED
 }
 
 // ===================
@@ -49,53 +60,95 @@ model Store {
 // ===================
 // Items for sale within a store
 model Product {
-  id          String   @id @default(uuid())
-  storeId     String   @map("store_id")
+  id          String        @id @default(uuid())
+  storeId     String        @map("store_id")
   name        String
+  slug        String        // URL-friendly identifier (unique per store)
+  price       Int           @map("price_kobo") // Price in smallest unit (kobo)
+  currency    String        @default("NGN")
   description String?
-  priceKobo   Int      @map("price_kobo") // Price in smallest unit (kobo)
-  quantity    Int?     // Optional inventory tracking
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  status      ProductStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
   
-  store       Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  orders      Order[]
+  store       Store         @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
+  @@unique([storeId, slug])
   @@index([storeId])
-  @@index([isActive])
+  @@index([status])
   @@map("products")
+}
+
+// Product status enum
+enum ProductStatus {
+  ACTIVE
+  PAUSED
 }
 
 // ===================
 // ORDERS
 // ===================
 // Immutable record of a purchase
-// Contains snapshot of product at time of purchase
+// Created at checkout initiation, status updated via webhook
 model Order {
-  id              String   @id @default(uuid())
-  productId       String   @map("product_id")
-  vendorId        String   @map("vendor_id")
-  
-  // SNAPSHOT at time of purchase (immutable)
-  // These fields capture the product state when the order was placed
-  productName     String   @map("product_name")
-  productPriceKobo Int     @map("product_price_kobo")
-  productDesc     String?  @map("product_desc")
+  id              String      @id @default(uuid())
+  vendorId        String      @map("vendor_id")
+  paymentId       String?     @unique @map("payment_id")  // Nullable until payment linked
+  status          OrderStatus @default(AWAITING_PAYMENT)
   
   // Buyer information
-  buyerPhone      String   @map("buyer_phone")
-  buyerEmail      String?  @map("buyer_email")
+  buyerPhone      String      @map("buyer_phone")
+  buyerEmail      String?     @map("buyer_email")
   
-  createdAt       DateTime @default(now()) @map("created_at")
+  // Totals
+  totalAmountKobo Int         @map("total_amount_kobo")
   
-  product         Product  @relation(fields: [productId], references: [id])
-  payment         Payment?
+  // Timestamps
+  createdAt       DateTime    @default(now()) @map("created_at")
+  confirmedAt     DateTime?   @map("confirmed_at")
+  fulfilledAt     DateTime?   @map("fulfilled_at")
+  
+  // Relations
+  items           OrderItem[]
+  payment         Payment?    @relation(fields: [paymentId], references: [id])
 
   @@index([vendorId])
-  @@index([productId])
+  @@index([status])
   @@index([createdAt])
   @@map("orders")
+}
+
+// ===================
+// ORDER ITEMS
+// ===================
+// Frozen snapshot of product at time of purchase
+// No FK to Product - immutable record independent of product changes
+model OrderItem {
+  id                String   @id @default(uuid())
+  orderId           String   @map("order_id")
+  
+  // SNAPSHOT at time of purchase (frozen, immutable)
+  productName       String   @map("product_name")
+  unitPriceKobo     Int      @map("unit_price_kobo")
+  quantity          Int
+  
+  // Optional: original product reference for audit (not a FK)
+  originalProductId String?  @map("original_product_id")
+  
+  order             Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// Order status enum - FORWARD ONLY transitions
+enum OrderStatus {
+  CREATED           // Order shell created (internal state)
+  AWAITING_PAYMENT  // Checkout initiated, waiting for payment
+  CONFIRMED         // Payment verified via webhook
+  FULFILLED         // Vendor marked as fulfilled
+  CANCELLED         // Payment failed or cancelled
+  REFUNDED          // Refund processed
 }
 
 // ===================
@@ -105,7 +158,6 @@ model Order {
 // Payment status is FORWARD-ONLY: PENDING -> CONFIRMED or PENDING -> FAILED
 model Payment {
   id              String        @id @default(uuid())
-  orderId         String?       @unique @map("order_id")  // Optional - assigned after order creation
   internalRef     String        @unique @map("internal_ref")  // Our internal reference
   amountKobo      Int           @map("amount_kobo")
   currency        String        @default("NGN")
@@ -118,7 +170,8 @@ model Payment {
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
   
-  order           Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Relation: Order now owns this reference
+  order           Order?
 
   @@index([status])
   @@index([paystackRef])
@@ -150,4 +203,32 @@ model WebhookEvent {
   @@index([provider, eventType])
   @@index([createdAt])
   @@map("webhook_events")
+}
+
+// ===================
+// MESSAGE LOGS
+// ===================
+// Tracks all WhatsApp message sends for debugging, resends, and audit
+model MessageLog {
+  id                String        @id @default(uuid())
+  orderId           String        @map("order_id")
+  recipientPhone    String        @map("recipient_phone")
+  templateName      String        @map("template_name")
+  status            MessageStatus @default(PENDING)
+  providerMessageId String?       @map("provider_message_id")
+  errorMessage      String?       @map("error_message")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  sentAt            DateTime?     @map("sent_at")
+
+  @@index([orderId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("message_logs")
+}
+
+// Message delivery status
+enum MessageStatus {
+  PENDING
+  SENT
+  FAILED
 }

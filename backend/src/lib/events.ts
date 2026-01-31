@@ -9,10 +9,10 @@ const logger = createLogger('events');
 /**
  * Domain events are emitted when significant business events occur.
  * 
- * IMPORTANT: These events have NO SIDE EFFECTS in Epic 4.
+ * IMPORTANT: Event handlers run as side effects and MUST NOT throw.
  * They exist for:
  * 1. Audit logging
- * 2. Future integration points (WhatsApp notifications, order creation, etc.)
+ * 2. WhatsApp notifications (Epic 6)
  * 3. Clear separation of concerns
  */
 
@@ -29,17 +29,37 @@ export interface PaymentEvent {
 }
 
 // ===================
-// EVENT EMITTER
+// ORDER DOMAIN EVENTS (Epic 6)
+// ===================
+
+export type OrderEventType = 'ORDER_CONFIRMED' | 'ORDER_FULFILLED';
+
+export interface OrderEvent {
+    type: OrderEventType;
+    orderId: string;
+    vendorId: string;
+    buyerPhone: string;
+    buyerEmail: string | null;
+    storeName: string;
+    vendorPhone: string | null;
+    totalAmountKobo: number;
+    items: Array<{
+        productName: string;
+        quantity: number;
+        unitPriceKobo: number;
+    }>;
+    timestamp: Date;
+}
+
+// ===================
+// PAYMENT EVENT EMITTER
 // ===================
 
 /**
  * Emit a payment event
  * 
  * In Epic 4, this only logs the event.
- * Future epics will add:
- * - WhatsApp notifications
- * - Order creation
- * - Vendor alerts
+ * In Epic 6+, this triggers notification handlers.
  */
 export async function emitPaymentEvent(event: PaymentEvent): Promise<void> {
     // Log the event for audit trail
@@ -52,40 +72,77 @@ export async function emitPaymentEvent(event: PaymentEvent): Promise<void> {
         metadata: event.metadata,
         timestamp: event.timestamp.toISOString(),
     }, `Domain event emitted: ${event.type}`);
-
-    // Future: Add event handlers here
-    // Example:
-    // - await notifyVendorViaWhatsApp(event);
-    // - await createOrderFromPayment(event);
-    // - await updateAnalytics(event);
 }
 
 // ===================
-// EVENT SUBSCRIBERS (Placeholder)
+// ORDER EVENT EMITTER (Epic 6)
 // ===================
 
+export type OrderEventHandler = (event: OrderEvent) => Promise<void>;
+
+const orderEventHandlers: OrderEventHandler[] = [];
+
 /**
- * Subscribe to payment events
+ * Subscribe to order events
  * 
- * This is a placeholder for future event handling.
- * In a production system, this would use a proper event bus.
+ * Used by notification handlers to react to order state changes.
  */
+export function subscribeToOrderEvents(handler: OrderEventHandler): void {
+    orderEventHandlers.push(handler);
+    logger.debug(`Order event handler registered. Total handlers: ${orderEventHandlers.length}`);
+}
+
+/**
+ * Emit an order event and dispatch to all registered handlers
+ * 
+ * CRITICAL: Handlers are fire-and-forget. Failures are logged but never thrown.
+ * This ensures order state transitions are never blocked by side effects.
+ */
+export async function emitOrderEvent(event: OrderEvent): Promise<void> {
+    // Log the event for audit trail
+    logger.info({
+        eventType: event.type,
+        orderId: event.orderId,
+        vendorId: event.vendorId,
+        buyerPhone: event.buyerPhone.slice(-4),
+        totalAmountKobo: event.totalAmountKobo,
+        itemCount: event.items.length,
+        timestamp: event.timestamp.toISOString(),
+    }, `Domain event emitted: ${event.type}`);
+
+    // Dispatch to all registered handlers (async, non-blocking)
+    for (const handler of orderEventHandlers) {
+        // Use setImmediate to ensure this is truly non-blocking
+        setImmediate(async () => {
+            try {
+                await handler(event);
+            } catch (error) {
+                logger.error({
+                    eventType: event.type,
+                    orderId: event.orderId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                }, 'Order event handler failed');
+                // Never throw - this is a side effect
+            }
+        });
+    }
+}
+
+// ===================
+// PAYMENT EVENT SUBSCRIBERS (Legacy)
+// ===================
+
 export type PaymentEventHandler = (event: PaymentEvent) => Promise<void>;
 
-const eventHandlers: PaymentEventHandler[] = [];
+const paymentEventHandlers: PaymentEventHandler[] = [];
 
 export function subscribeToPaymentEvents(handler: PaymentEventHandler): void {
-    eventHandlers.push(handler);
-    logger.debug(`Payment event handler registered. Total handlers: ${eventHandlers.length}`);
+    paymentEventHandlers.push(handler);
+    logger.debug(`Payment event handler registered. Total handlers: ${paymentEventHandlers.length}`);
 }
 
-/**
- * Dispatch event to all registered handlers
- * 
- * NOTE: Not used in Epic 4. Reserved for future use.
- */
 export async function dispatchPaymentEvent(event: PaymentEvent): Promise<void> {
-    for (const handler of eventHandlers) {
+    for (const handler of paymentEventHandlers) {
         try {
             await handler(event);
         } catch (error) {
@@ -98,3 +155,4 @@ export async function dispatchPaymentEvent(event: PaymentEvent): Promise<void> {
         }
     }
 }
+

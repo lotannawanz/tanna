@@ -33,7 +33,9 @@ async function paystackWebhookHandler(
     const prisma = getPrismaClient();
 
     // Get raw payload for signature verification
-    const rawPayload = JSON.stringify(request.body);
+    // Use the raw body string provided by fastify-raw-body plugin
+    // This is CRITICAL because JSON.stringify() reorders keys and breaks signature match
+    const rawPayload = (request.rawBody as string) || JSON.stringify(request.body);
     const signature = request.headers['x-paystack-signature'] as string;
 
     // STEP 1: Verify signature FIRST
@@ -52,6 +54,10 @@ async function paystackWebhookHandler(
     if (!verifyPaystackSignature(rawPayload, signature)) {
         logger.error({
             ip: request.ip,
+            rawPayloadLength: rawPayload ? rawPayload.length : 0,
+            rawPayloadPreview: rawPayload ? rawPayload.substring(0, 50) : null,
+            isRawBodyPresent: !!request.rawBody,
+            signatureReceived: signature,
         }, 'Paystack webhook signature verification failed');
 
         return reply.status(401).send({
@@ -120,7 +126,12 @@ async function paystackWebhookHandler(
 
 export async function webhooksRoutes(fastify: FastifyInstance) {
     // Paystack webhook endpoint
-    fastify.post('/api/webhooks/paystack', paystackWebhookHandler);
+    // Paystack webhook endpoint
+    fastify.post('/api/webhooks/paystack', {
+        config: {
+            rawBody: true
+        }
+    }, paystackWebhookHandler);
 
     logger.debug('Webhook routes registered');
 }

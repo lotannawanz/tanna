@@ -1,10 +1,19 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { healthRoutes } from './routes/health.js';
 import { paymentsRoutes } from './routes/payments.js';
 import { webhooksRoutes } from './routes/webhooks.js';
+import { ordersRoutes } from './routes/orders.js';
+import { authRoutes } from './routes/auth.js';
+import { storeRoutes } from './routes/store.js';
+import { publicRoutes } from './routes/public.routes.js';
+import { productsRoutes } from './routes/products.js';
+import { storeOverviewRoutes } from './routes/store-overview.js';
 import { disconnectPrisma, getPrismaClient } from './lib/database.js';
+import rawBody from 'fastify-raw-body';
+import { registerNotificationHandlers } from './services/notification.handler.js';
 
 /**
  * Tanna Backend Server
@@ -14,6 +23,8 @@ import { disconnectPrisma, getPrismaClient } from './lib/database.js';
  * - Graceful shutdown
  * - Health monitoring
  * - Database connection management
+ * - Vendor authentication (Epic 1)
+ * - WhatsApp notification handlers (Epic 6)
  */
 async function main() {
     const fastify = Fastify({
@@ -38,10 +49,34 @@ async function main() {
     // Make prisma available to routes
     fastify.decorate('prisma', prisma);
 
+    // Register CORS for frontend access
+    await fastify.register(cors, {
+        origin: ['http://localhost:5173', 'http://localhost:3000'],
+        credentials: true,
+    });
+
+    // Register raw body plugin for webhook signature verification
+    await fastify.register(rawBody, {
+        field: 'rawBody',
+        global: false,
+        encoding: 'utf8',
+        runFirst: true,
+    });
+
     // Register routes
     await fastify.register(healthRoutes);
+    await fastify.register(authRoutes);       // Epic 1: Auth
+    await fastify.register(storeRoutes);      // Epic 1: Stores
     await fastify.register(paymentsRoutes);
     await fastify.register(webhooksRoutes);
+    await fastify.register(ordersRoutes);
+    await fastify.register(productsRoutes);  // Epic 2: Products
+    await fastify.register(storeOverviewRoutes);  // Epic 8: Store overview
+    await fastify.register(publicRoutes);  // Epic 3: Public product pages & checkout
+
+    // EPIC 6: Register WhatsApp notification handlers
+    registerNotificationHandlers();
+    logger.info('WhatsApp notification handlers registered');
 
     // Graceful shutdown handler
     const shutdown = async (signal: string) => {
