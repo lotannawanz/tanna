@@ -1,6 +1,6 @@
-import { PrismaClient, OrderStatus, PaymentStatus } from '@prisma/client';
+import { PrismaClient, OrderStatus, PaymentStatus, JobType } from '@prisma/client';
 import { createLogger } from '../lib/logger.js';
-import { emitOrderEvent } from '../lib/events.js';
+import { enqueueJob } from '../lib/queue.js';
 
 const logger = createLogger('order-service');
 
@@ -202,9 +202,6 @@ export async function confirmOrder(
     });
 
     logger.info({ orderId }, 'Order confirmed');
-
-    // EPIC 6: Emit event for WhatsApp notifications (non-blocking side effect)
-    await emitOrderConfirmedEvent(prisma, orderId);
 }
 
 /**
@@ -279,146 +276,11 @@ export async function fulfillOrder(
 
     logger.info({ orderId, vendorId }, 'Order fulfilled');
 
-    // EPIC 6: Emit event for WhatsApp notifications (non-blocking side effect)
-    await emitOrderFulfilledEvent(prisma, orderId);
-}
-
-// ===================
-// EVENT EMISSION HELPERS (Epic 6)
-// ===================
-
-/**
- * Emit ORDER_CONFIRMED event with full order context
- * 
- * This fetches the order details needed for WhatsApp notifications.
- * Note: Vendor phone is looked up from vendor/store if available.
- */
-async function emitOrderConfirmedEvent(
-    prisma: PrismaClient,
-    orderId: string
-): Promise<void> {
-    try {
-        const order = await prisma.order.findUnique({
-            where: { id: orderId },
-            include: {
-                items: true,
-            },
-        });
-
-        if (!order) {
-            logger.warn({ orderId }, 'Order not found for event emission');
-            return;
-        }
-
-        // Try to get store name from vendor's first store
-        // In future, this should come from the order itself
-        let storeName = 'Store';
-        let vendorPhone: string | null = null;
-
-        try {
-            const vendor = await prisma.vendor.findUnique({
-                where: { id: order.vendorId },
-                include: {
-                    store: true,
-                },
-            });
-
-            if (vendor?.store?.name) {
-                storeName = vendor.store.name;
-            }
-            if (vendor?.phone) {
-                vendorPhone = vendor.phone;
-            }
-        } catch (e) {
-            // Non-critical - use defaults
-        }
-
-        await emitOrderEvent({
-            type: 'ORDER_CONFIRMED',
-            orderId: order.id,
-            vendorId: order.vendorId,
-            buyerPhone: order.buyerPhone,
-            buyerEmail: order.buyerEmail,
-            storeName,
-            vendorPhone,
-            totalAmountKobo: order.totalAmountKobo,
-            items: order.items.map(item => ({
-                productName: item.productName,
-                quantity: item.quantity,
-                unitPriceKobo: item.unitPriceKobo,
-            })),
-            timestamp: new Date(),
-        });
-    } catch (error) {
-        // Event emission must never block order flow
-        logger.error({
-            orderId,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        }, 'Failed to emit ORDER_CONFIRMED event');
-    }
-}
-
-/**
- * Emit ORDER_FULFILLED event with full order context
- */
-async function emitOrderFulfilledEvent(
-    prisma: PrismaClient,
-    orderId: string
-): Promise<void> {
-    try {
-        const order = await prisma.order.findUnique({
-            where: { id: orderId },
-            include: {
-                items: true,
-            },
-        });
-
-        if (!order) {
-            logger.warn({ orderId }, 'Order not found for event emission');
-            return;
-        }
-
-        // Try to get store name
-        let storeName = 'Store';
-
-        try {
-            const vendor = await prisma.vendor.findUnique({
-                where: { id: order.vendorId },
-                include: {
-                    store: true,
-                },
-            });
-
-            if (vendor?.store?.name) {
-                storeName = vendor.store.name;
-            }
-        } catch (e) {
-            // Non-critical - use defaults
-        }
-
-        await emitOrderEvent({
-            type: 'ORDER_FULFILLED',
-            orderId: order.id,
-            vendorId: order.vendorId,
-            buyerPhone: order.buyerPhone,
-            buyerEmail: order.buyerEmail,
-            storeName,
-            vendorPhone: null,
-            totalAmountKobo: order.totalAmountKobo,
-            items: order.items.map(item => ({
-                productName: item.productName,
-                quantity: item.quantity,
-                unitPriceKobo: item.unitPriceKobo,
-            })),
-            timestamp: new Date(),
-        });
-    } catch (error) {
-        // Event emission must never block order flow
-        logger.error({
-            orderId,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        }, 'Failed to emit ORDER_FULFILLED event');
-    }
+    // Enqueue WhatsApp notification as a durable job
+    await enqueueJob(prisma, {
+        type: JobType.SEND_WHATSAPP,
+        payload: { orderId, trigger: 'ORDER_FULFILLED' },
+    });
 }
 
 // ===================

@@ -2,8 +2,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPrismaClient } from '../lib/database.js';
 import { createLogger } from '../lib/logger.js';
 import { verifyPaystackSignature, PaystackWebhookEvent } from '../services/paystack.js';
-import { handleWebhookIdempotently } from '../lib/idempotency.js';
-import { processPaystackPaymentEvent } from '../services/payment.service.js';
+import { storeWebhookEvent } from '../lib/idempotency.js';
+import { enqueueJob } from '../lib/queue.js';
+import { JobType } from '@prisma/client';
 
 const logger = createLogger('webhooks-route');
 
@@ -13,18 +14,18 @@ const logger = createLogger('webhooks-route');
 
 /**
  * POST /api/webhooks/paystack
- * 
+ *
  * Secure Paystack webhook listener.
- * 
+ *
  * Flow:
  * 1. Verify signature (reject if invalid)
- * 2. Store raw payload in WebhookEvent
- * 3. Check idempotency (skip if duplicate)
- * 4. Process event if new
- * 5. Return 200 immediately (Paystack requirement)
- * 
- * CRITICAL: This is the ONLY source of payment truth.
- * Redirect success does NOT confirm payment.
+ * 2. Store raw payload in WebhookEvent (idempotency check)
+ * 3. Enqueue WEBHOOK_PROCESS job
+ * 4. Return 200 immediately (Paystack requirement)
+ *
+ * CRITICAL: No business logic runs inline. The worker handles processing.
+ * This ensures the endpoint always responds fast and never blocks on
+ * downstream failures (payment service, order service, WhatsApp).
  */
 async function paystackWebhookHandler(
     request: FastifyRequest,
@@ -33,9 +34,7 @@ async function paystackWebhookHandler(
     const prisma = getPrismaClient();
 
     // Get raw payload for signature verification
-    // Use the raw body string provided by fastify-raw-body plugin
-    // This is CRITICAL because JSON.stringify() reorders keys and breaks signature match
-    const rawPayload = (request.rawBody as string) || JSON.stringify(request.body);
+    const rawPayload = ((request as any).rawBody as string) || JSON.stringify(request.body);
     const signature = request.headers['x-paystack-signature'] as string;
 
     // STEP 1: Verify signature FIRST
@@ -55,8 +54,7 @@ async function paystackWebhookHandler(
         logger.error({
             ip: request.ip,
             rawPayloadLength: rawPayload ? rawPayload.length : 0,
-            rawPayloadPreview: rawPayload ? rawPayload.substring(0, 50) : null,
-            isRawBodyPresent: !!request.rawBody,
+            isRawBodyPresent: !!(request as any).rawBody,
             signatureReceived: signature,
         }, 'Paystack webhook signature verification failed');
 
@@ -68,56 +66,35 @@ async function paystackWebhookHandler(
 
     // Parse the event
     const event = request.body as PaystackWebhookEvent;
-
-    // Extract event ID for idempotency
-    // Paystack uses the transaction ID as the unique identifier
     const eventId = `paystack_${event.data.id}`;
+
+    // STEP 2: Store raw event (idempotency — rejects duplicates via unique constraint)
+    const isNew = await storeWebhookEvent(prisma, {
+        provider: 'paystack',
+        eventId,
+        eventType: event.event,
+        rawPayload: event,
+    });
+
+    if (!isNew) {
+        logger.info({ eventId }, 'Duplicate webhook event — skipped');
+        return reply.status(200).send({ success: true, duplicate: true });
+    }
+
+    // STEP 3: Enqueue processing job (never process inline)
+    await enqueueJob(prisma, {
+        type: JobType.WEBHOOK_PROCESS,
+        payload: { eventId, provider: 'paystack' },
+    });
 
     logger.info({
         eventId,
         eventType: event.event,
         reference: event.data.reference,
-    }, 'Paystack webhook received');
+    }, 'Webhook stored and job enqueued');
 
-    // STEP 2-4: Store and process idempotently
-    const result = await handleWebhookIdempotently(
-        prisma,
-        {
-            provider: 'paystack',
-            eventId,
-            eventType: event.event,
-            rawPayload: event,
-        },
-        async () => {
-            // Process the payment event
-            const verificationResult = await processPaystackPaymentEvent(prisma, event);
-
-            logger.info({
-                eventId,
-                paymentId: verificationResult.paymentId,
-                status: verificationResult.status,
-                reason: verificationResult.reason,
-            }, 'Paystack event processed');
-        }
-    );
-
-    // Log the outcome
-    if (!result.isNew) {
-        logger.info({ eventId }, 'Duplicate webhook event ignored');
-    } else if (!result.processed) {
-        logger.error({
-            eventId,
-            error: result.error,
-        }, 'Webhook processing failed');
-    }
-
-    // STEP 5: Always return 200 to Paystack
-    // Even if processing fails, we've stored the raw payload for retry
-    return reply.status(200).send({
-        success: true,
-        isNew: result.isNew,
-        processed: result.processed,
-    });
+    // STEP 4: Return 200 immediately
+    return reply.status(200).send({ success: true, enqueued: true });
 }
 
 // ===================
@@ -125,13 +102,19 @@ async function paystackWebhookHandler(
 // ===================
 
 export async function webhooksRoutes(fastify: FastifyInstance) {
-    // Paystack webhook endpoint
-    // Paystack webhook endpoint
-    fastify.post('/api/webhooks/paystack', {
-        config: {
-            rawBody: true
+    // Manual content parser to capture raw body for signature verification
+    fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body: string, done) => {
+        try {
+            const json = JSON.parse(body);
+            (req as any).rawBody = body;
+            done(null, json);
+        } catch (err) {
+            done(err as Error, undefined);
         }
-    }, paystackWebhookHandler);
+    });
+
+    // Paystack webhook endpoint
+    fastify.post('/api/webhooks/paystack', paystackWebhookHandler);
 
     logger.debug('Webhook routes registered');
 }
