@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -12,7 +12,7 @@ interface StoreSettings {
 }
 
 export function VendorSettingsPage() {
-    const { vendorId } = useParams();
+
     const { vendor, refreshVendor } = useAuth();
     const [store, setStore] = useState<StoreSettings | null>(null);
     const [loading, setLoading] = useState(true);

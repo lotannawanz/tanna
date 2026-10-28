@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { env } from '../config/env.js';
 import { createLogger } from '../lib/logger.js';
 
@@ -61,7 +61,10 @@ export function verifyPaystackSignature(
         .update(payload)
         .digest('hex');
 
-    const isValid = expectedSignature === signature;
+    // Use timing-safe comparison to prevent timing attacks
+    // Both signatures must be the same length for timingSafeEqual
+    const isValid = expectedSignature.length === signature.length &&
+        timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
 
     if (!isValid) {
         logger.warn({

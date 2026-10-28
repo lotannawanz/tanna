@@ -204,6 +204,7 @@ export function verifyToken(token: string): JWTPayload {
         const payload = jwt.verify(token, env.JWT_SECRET) as JWTPayload;
         return payload;
     } catch (error) {
+        logger.error({ error }, 'JWT Verification Failed');
         throw new Error('INVALID_TOKEN');
     }
 }

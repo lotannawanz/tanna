@@ -1,102 +1,135 @@
 # Tanna
 
-**Payment clarity and order confirmation for WhatsApp and Instagram vendors.**
+**Payment clarity for WhatsApp and Instagram commerce in Nigeria.**
 
-Tanna is a system designed to insert structure into informal commerce without turning it into formal e-commerce. It solves the specific problem of payment reconciliation and order confirmation for vendors who operate primarily in DMs.
+## The Problem
 
-> **Note:** This project is currently **Private** and intended for commercial launch.
+Millions of Nigerian vendors sell daily through WhatsApp and Instagram DMs. Their payment workflow is fundamentally broken:
 
-##  The Problem
+| What Happens Today | The Cost |
+|---|---|
+| Buyer sends a bank transfer | Vendor has no way to verify instantly |
+| Buyer sends a screenshot as "proof" | Screenshots can be faked |
+| NIP confirmation is delayed | Vendor refreshes bank app repeatedly |
+| Payment disputes happen in DMs | Trust erodes, sales slow down |
 
-Millions of vendors sell via WhatsApp/Instagram. Their workflow is broken:
-- Payments arrive with no context.
-- Vendors waste time manually reconciling bank transfers with screenshots.
-- Buyers feel anxious after paying.
-- Orders get lost or disputed.
+**The pain isn't speed. It isn't checkout UX. It's uncertainty.**
 
-**Tanna is not a marketplace. It is not a website builder. It is a payment-confirmed product page and notification system.**
+> "I've sent it, check again" — every vendor has heard this. Tanna makes this sentence unnecessary.
 
-##  Core Principles
+## What Tanna Does
 
-1.  **Informal by Nature, Structured by Design**: Respects how vendors sell in DMs.
-2.  **Boring Is Trustworthy**: No hype, no complex animations. Clear text beats clever design.
-3.  **One Job, Done Well**: Every feature must improve payment clarity and trust.
+Tanna gives vendors a **payment link** they can drop into any DM. When a buyer pays through that link:
 
-##  Tech Stack
+1. **Payment is verified independently** via Paystack webhooks — no screenshots needed
+2. **Both parties are notified instantly** via WhatsApp — no manual checking
+3. **An order is created automatically** — no spreadsheets, no lost sales
+4. **A confirmation page proves the transaction** — replaces screenshots forever
 
-This project is a monorepo containing both the frontend and backend.
+Tanna is not a marketplace. Not a website builder. Not a wallet.  
+**Tanna is a payment verification layer that sits on top of how vendors already sell.**
+
+## Who It's For
+
+High-velocity WhatsApp and Instagram vendors in Nigeria:
+- Food vendors processing 20+ orders/day
+- Hair and beauty vendors with high-value items
+- Clothing vendors managing multiple DM conversations
+
+These vendors don't want to "learn software." They want to know when they've been paid.
+
+## Product Documents
+
+| Document | Description |
+|---|---|
+| [Product Brief](docs/PRODUCT_BRIEF.md) | Full product manifesto — ICP, thesis, MVP scope, system primitives, and monetization strategy |
+| [Engineering Roadmap](docs/ENGINEERING_ROADMAP.md) | Prioritized build order with 11 epics, acceptance criteria, and explicit constraints |
+| [System Architecture](docs/ARCHITECTURE.md) | Technical architecture, data flow diagrams, and system design decisions |
+| [Operational Runbook](backend/docs/operational-runbook.md) | Backup strategy, disaster recovery, WhatsApp fallback, dispute handling |
+
+## Tech Stack
 
 ### Frontend (`/frontend`)
-- **Framework**: [React](https://react.dev/) with [Vite](https://vitejs.dev/)
+- **Framework**: React + Vite
 - **Language**: TypeScript
-- **Styling**: Vanilla CSS (Tailored design system, no frameworks)
-- **Key Features**:
-    - Product pages optimized for trust and speed.
-    - Payment verification screens.
-    - clean, "boring" UI that feels authoritative.
+- **Design**: Mobile-first, "boring-on-purpose" UI optimized for trust over aesthetics
 
 ### Backend (`/backend`)
-- **Runtime**: Node.js
-- **Server**: [Fastify](https://fastify.dev/)
-- **Database ORM**: [Prisma](https://www.prisma.io/)
-- **Language**: TypeScript
-- **Key Features**:
-    - Secure payment processing via Paystack.
-    - Webhook handling for indisputable payment truth.
-    - Idempotency enforcement.
+- **Runtime**: Node.js + Fastify
+- **Database**: PostgreSQL + Prisma ORM
+- **Payments**: Paystack (webhook-verified, idempotent)
+- **Notifications**: WhatsApp Business API (template-based, event-driven)
+- **Architecture**: Forward-only state machine for payments and orders
 
-##  Project Structure
+## Project Structure
 
 ```
 Tanna/
-├── backend/          # Node.js/Fastify Backend
-│   ├── src/
-│   │   ├── services/ # Business logic (Paystack, etc.)
-│   │   ├── routes/   # API endpoints
-│   │   └── lib/      # Shared utilities
-│   └── prisma/       # Database schema
+├── docs/                          # Product & architecture documentation
+│   ├── PRODUCT_BRIEF.md           # Product manifesto
+│   ├── ENGINEERING_ROADMAP.md     # Prioritized build epics
+│   └── ARCHITECTURE.md            # System architecture
 │
-├── frontend/         # React Frontend
+├── backend/                       # Node.js/Fastify API
 │   ├── src/
-│   │   ├── components/
-│   │   └── pages/
-│   └── public/
+│   │   ├── routes/                # API endpoints
+│   │   ├── services/              # Business logic (payments, orders, WhatsApp)
+│   │   ├── lib/                   # Shared utilities (idempotency, queue, events)
+│   │   ├── middleware/            # Auth middleware
+│   │   ├── workers/               # Background job handlers
+│   │   └── config/                # Environment validation
+│   ├── prisma/                    # Database schema & migrations
+│   └── docs/                      # Operational runbook
+│
+├── frontend/                      # React SPA
+│   ├── src/
+│   │   ├── pages/                 # Vendor dashboard, public product pages, auth
+│   │   ├── components/            # Reusable UI components
+│   │   ├── context/               # Auth state management
+│   │   ├── lib/                   # API client
+│   │   └── types/                 # TypeScript definitions
+│   └── public/                    # Static assets
 ```
 
-##  Getting Started
+## Key Design Decisions
+
+1. **Webhook is the source of truth** — Redirect success is not confirmation. Only Paystack webhooks mutate order state.
+2. **Idempotency everywhere** — Duplicate webhooks are safely ignored. Payment state can only move forward.
+3. **Product snapshots at order time** — Price changes after purchase never retroactively affect existing orders.
+4. **No buyer accounts** — Buyers pay and go. Zero friction.
+5. **WhatsApp is a trust surface** — Template-only messages. No chatbots, no marketing, no upsells.
+
+## Getting Started
 
 ### Prerequisites
-- Node.js (v18+)
-- PostgreSQL (Local or hosted)
-- Paystack Account (Test keys)
+- Node.js 20+
+- PostgreSQL 15+
+- Paystack account (test keys)
 
-### Installation
+### Setup
 
-1.  **Clone the repository**
-    ```bash
-    git clone https://github.com/lotannawanz/tanna.git
-    cd tanna
-    ```
+```bash
+# Clone
+git clone https://github.com/lotannawanz/tanna.git
+cd tanna
 
-2.  **Setup Backend**
-    ```bash
-    cd backend
-    npm install
-    # Copy .env.example to .env and fill in your details
-    cp .env.example .env
-    # Run migrations
-    npx prisma migrate dev
-    # Start server
-    npm run dev
-    ```
+# Backend
+cd backend
+npm install
+cp .env.example .env
+npx prisma migrate dev
+npm run dev
 
-3.  **Setup Frontend**
-    ```bash
-    cd frontend
-    npm install
-    npm run dev
-    ```
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev
+```
 
-##  License
+## Current Status
+
+**MVP in development** — Core payment flow (product page → Paystack checkout → webhook verification → order creation → WhatsApp notification) is functional end-to-end.
+
+## License
 
 Proprietary. All rights reserved.

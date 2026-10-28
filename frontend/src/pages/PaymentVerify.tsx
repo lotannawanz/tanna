@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { api } from '../lib/api';
 import './PaymentVerify.css';
 
 // ===================
 // TYPES
 // ===================
 
-type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'FAILED';
+type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'FAILED' | 'DELAYED';
 
 interface OrderItem {
     productName: string;
@@ -71,24 +72,14 @@ export function PaymentVerify() {
 
         const checkStatus = async () => {
             if (Date.now() - startTime > MAX_POLL_DURATION) {
-                setError('Verification timed out. Your payment may still be processing. Please check your email or contact the vendor.');
-                setStatus('FAILED');
+                setError("We haven't received final confirmation from your bank yet. This sometimes happens due to network delays. Your money is safe — if the charge was successful, you will receive a receipt via email and WhatsApp once the network confirms it.");
+                setStatus('DELAYED');
                 return;
             }
 
             try {
-                const response = await fetch(`/api/payments/${reference}`);
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        setError('Payment record not found. Please check your reference and try again.');
-                        setStatus('FAILED');
-                        return;
-                    }
-                    throw new Error('Failed to verify payment');
-                }
-
-                const data = await response.json();
+                const response = await api.get(`/api/payments/${reference}`);
+                const data = response.data;
                 const currentStatus = data.payment.status;
 
                 if (isSubscribed) {
@@ -104,7 +95,14 @@ export function PaymentVerify() {
                         timeoutId = setTimeout(checkStatus, POLL_INTERVAL);
                     }
                 }
-            } catch (err) {
+            } catch (error) {
+                const err = error as Error & { response?: { status?: number } };
+                if (err.response?.status === 404) {
+                    setError('Payment record not found. Please check your reference and try again.');
+                    setStatus('FAILED');
+                    return;
+                }
+
                 if (isSubscribed) {
                     // Network error - keep trying
                     setPollCount(prev => prev + 1);
@@ -174,8 +172,16 @@ export function PaymentVerify() {
                 <div className="receipt-card confirmed">
                     {/* Success Header */}
                     <div className="status-icon confirmed">✓</div>
-                    <h2>Payment Confirmed</h2>
-                    <p className="subtitle">Your order has been placed successfully.</p>
+                    <h2>Payment Verified</h2>
+
+                    {/* Massive Tabular Amount */}
+                    <div style={{ margin: '1.5rem 0 2rem 0' }}>
+                        <div className="tabular-nums" style={{ fontSize: '2.5rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>
+                            {formattedAmount}
+                        </div>
+                    </div>
+
+                    <div className="receipt-divider"></div>
 
                     {/* Store Info (Trust Signal) */}
                     {store && (
@@ -214,8 +220,8 @@ export function PaymentVerify() {
                     {/* Receipt Details */}
                     <div className="receipt-details">
                         <div className="detail-row">
-                            <span>Total Paid</span>
-                            <span className="amount">{formattedAmount}</span>
+                            <span>Status</span>
+                            <span style={{ fontWeight: 600, color: '#166534' }}>Successful</span>
                         </div>
                         <div className="detail-row">
                             <span>Date</span>
@@ -239,44 +245,87 @@ export function PaymentVerify() {
                     </div>
 
                     {/* Reference Footer */}
-                    <p className="reference-footer">
-                        Payment Ref: {reference}
+                    <p className="reference-footer" style={{ marginTop: '1.5rem' }}>
+                        Ref: {reference}
                     </p>
 
-                    {/* Powered by Tanna */}
+                    {/* Powered by Tanna & Trust Signal */}
                     <div className="powered-by">
-                        Powered by <strong>Tanna</strong>
+                        <div style={{ marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                            <span style={{ fontSize: '0.8rem' }}>🔒 Secured via Paystack / CBN Licensed Partners</span>
+                        </div>
+                        Verified by <strong>Tanna</strong>. Immutable record.
                     </div>
                 </div>
             </div>
         );
     }
 
+    // DELAYED STATE (Timeout but not explicitly failed)
+    if (status === 'DELAYED') {
+        return (
+            <div className="payment-verify">
+                <div className="receipt-card delayed" style={{ borderTop: '4px solid #f59e0b' }}>
+                    <div className="status-icon" style={{ backgroundColor: '#fef3c7', color: '#d97706' }}>⏱</div>
+                    <h2>Taking Longer Than Usual</h2>
+                    <p className="error-message" style={{ color: '#4b5563', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                        {error}
+                    </p>
+
+                    <div className="action-buttons">
+                        <Link to="/" className="btn-primary" style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}>
+                            Return to Store
+                        </Link>
+                    </div>
+
+                    <p className="reference-footer">
+                        Payment Ref: {reference}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     // PENDING STATE
+    const pendingMessages = [
+        "Awaiting confirmation...",
+        "Verifying transaction details...",
+        "Connecting securely...",
+        "Almost there..."
+    ];
+    const messageIndex = Math.min(Math.floor(pollCount / 2), pendingMessages.length - 1);
+
     return (
         <div className="payment-verify">
             <div className="receipt-card pending">
                 <div className="spinner"></div>
-                <h2>Confirming Payment...</h2>
-                <p className="subtitle">
-                    Please wait while we verify your transaction.
+                <h2>Verifying Payment</h2>
+                <p className="subtitle" style={{ minHeight: '1.5rem', transition: 'opacity 0.3s' }}>
+                    {pendingMessages[messageIndex]}
                 </p>
 
                 <div className="progress-info">
                     <div className="progress-bar">
                         <div
                             className="progress-fill"
-                            style={{ width: `${Math.min(pollCount * 8, 95)}%` }}
+                            style={{
+                                width: `${Math.min(pollCount * 5 + 10, 95)}%`,
+                                transition: 'width 1s ease-out'
+                            }}
                         ></div>
                     </div>
                     <p className="time-estimate">
-                        This usually takes 5-15 seconds
+                        This usually takes about 10 seconds.
                     </p>
                 </div>
 
-                <p className="warning-text">
-                    Do not close this page.
-                </p>
+                <div className="trust-signals" style={{ marginTop: '2.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <p style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        Secured by Paystack / CBN Licensed Partners
+                    </p>
+                    <p style={{ marginTop: '0.75rem' }}>Please do not close or refresh this page.</p>
+                </div>
             </div>
         </div>
     );

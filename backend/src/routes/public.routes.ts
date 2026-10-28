@@ -237,7 +237,7 @@ async function publicCheckoutHandler(
         const paymentResult = await createPaymentIntent(prisma, {
             amount: order.totalAmountKobo,
             currency: product.currency,
-            email: body.buyerEmail || `${body.buyerPhone.replace(/\D/g, '')}@tanna.local`,  // Paystack requires email
+            email: body.buyerEmail || `guest-${body.buyerPhone.replace(/\D/g, '')}@tanna.app`,  // Paystack requires email
             vendorRef: product.vendorId,
             productRef: order.id,  // Store order ID for reconciliation
             callbackUrl: body.callbackUrl,
@@ -281,11 +281,17 @@ async function publicCheckoutHandler(
 // ===================
 
 export async function publicRoutes(fastify: FastifyInstance) {
-    // EPIC3-BACKEND-01: Public Product Fetch API
-    fastify.get('/api/public/store/:storeSlug/product/:productSlug', getPublicProductHandler);
+    // EPIC3-BACKEND-01: Public Product Fetch API — moderate limit
+    fastify.get('/api/public/store/:storeSlug/product/:productSlug', {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+        handler: getPublicProductHandler,
+    } as any);
 
-    // EPIC3-BACKEND-02: Order-First Checkout Entry (Public)
-    fastify.post('/api/public/checkout', publicCheckoutHandler);
+    // EPIC3-BACKEND-02: Order-First Checkout Entry — tight limit to prevent abuse
+    fastify.post('/api/public/checkout', {
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+        handler: publicCheckoutHandler,
+    } as any);
 
-    logger.debug('Public routes registered (no auth required)');
+    logger.debug('Public routes registered with rate limits (no auth required)');
 }

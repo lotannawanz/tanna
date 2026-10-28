@@ -46,7 +46,7 @@ export function VendorOrderDetail() {
 
         const fetchOrder = async () => {
             try {
-                const response = await api.get(`/api/vendors/${effectiveVendorId}/orders/${orderId}`);
+                const response = await api.get(`/api/orders/${orderId}`);
                 setOrder(response.data.order);
             } catch (err: any) {
                 setError(err.response?.data?.message || err.message || 'Failed to fetch order details');
@@ -64,10 +64,10 @@ export function VendorOrderDetail() {
 
         setFulfilling(true);
         try {
-            await api.post(`/api/vendors/${effectiveVendorId}/orders/${orderId}/fulfill`);
+            await api.post(`/api/orders/${orderId}/fulfill`);
 
             // Refresh order data
-            const refreshResponse = await api.get(`/api/vendors/${effectiveVendorId}/orders/${orderId}`);
+            const refreshResponse = await api.get(`/api/orders/${orderId}`);
             setOrder(refreshResponse.data.order);
             alert('Order marked as fulfilled!');
         } catch (err: any) {
@@ -248,9 +248,8 @@ export function VendorOrderDetail() {
                     bottom: 'var(--space-4)',
                     backgroundColor: 'white',
                     padding: 'var(--space-4)',
-                    boxShadow: '0 -4px 12px rgba(0,0,0,0.05)',
-                    borderRadius: '8px',
-                    border: '1px solid #eee',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'

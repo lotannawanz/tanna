@@ -1,73 +1,65 @@
-# React + TypeScript + Vite
+# Tanna Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Mobile-first React application for Tanna's buyer-facing product pages and vendor dashboard.
 
-Currently, two official plugins are available:
+## Design Philosophy
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Boring is trustworthy** — No flashy animations. Clear text, obvious CTAs, predictable layouts.
+- **Mobile-first** — 90%+ of target users (Nigerian WhatsApp vendors and their buyers) browse on mobile.
+- **Speed over polish** — Pages must load fast on poor networks. Every KB matters.
 
-## React Compiler
+## Key Screens
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Public (No Auth Required)
+| Screen | Purpose |
+|---|---|
+| **Product Page** | Buyer sees product details, price, and a single "Pay" button |
+| **Payment Verification** | Post-payment confirmation with order ID and WhatsApp indicator |
 
-## Expanding the ESLint configuration
+### Vendor Dashboard (Authenticated)
+| Screen | Purpose |
+|---|---|
+| **Dashboard** | Order overview — "What did I sell today?" |
+| **Product List** | Manage products (create, edit, toggle active/inactive) |
+| **Order Detail** | View order info, buyer details, payment status |
+| **Settings** | Store configuration, WhatsApp number |
+| **Create Store** | One-time store setup (name + slug) |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Tech Stack
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Framework**: [React](https://react.dev/) with [Vite](https://vitejs.dev/)
+- **Language**: TypeScript
+- **Styling**: Vanilla CSS (custom design system, no frameworks)
+- **Routing**: React Router
+- **Auth**: JWT tokens via AuthContext provider
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Getting Started
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The dev server runs on `http://localhost:5173` by default.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Project Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── pages/
+│   ├── auth/              # Login, Signup
+│   ├── vendor/            # Dashboard, Products, Orders, Settings
+│   └── public/            # Public product page
+├── components/
+│   ├── ProductForm.tsx    # Reusable product create/edit form
+│   ├── ProtectedRoute.tsx # Auth route guard
+│   └── public/            # Buyer-facing components
+├── context/
+│   └── AuthContext.tsx    # JWT auth state management
+├── lib/
+│   └── api.ts            # Axios API client (auto-attaches JWT)
+├── types/                 # TypeScript type definitions
+├── App.tsx               # Root component with routing
+├── main.tsx              # Entry point
+└── index.css             # Global styles
 ```

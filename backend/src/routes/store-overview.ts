@@ -123,6 +123,8 @@ async function getStoreOverviewHandler(
             storeId: store.id,
             totalOrders: overview.stats.totalOrders,
             ordersToday: overview.stats.ordersToday,
+            productCount: overview.stats.productCount,
+            activeProductCount: overview.stats.activeProductCount,
         }, 'Store overview fetched');
 
         return reply.status(200).send({

@@ -64,7 +64,11 @@ export async function authMiddleware(
         request.vendorId = vendor.id;
         request.storeId = vendor.store?.id || null;
 
-        logger.debug({ vendorId: vendor.id, storeId: request.storeId }, 'Auth middleware passed');
+        logger.info({
+            vendorId: vendor.id,
+            storeId: request.storeId,
+            hasStore: !!vendor.store
+        }, 'Auth middleware resolved vendor and store');
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
 

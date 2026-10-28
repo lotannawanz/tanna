@@ -1,8 +1,9 @@
 import axios from 'axios';
 
 // Base URL for the backend API
-// In production, this would come from import.meta.env.VITE_API_URL
-const API_URL = 'http://localhost:3000';
+// Using direct EC2 IP - ngrok free tier interstitial breaks browser requests
+// Paystack webhooks still work via ngrok (server-to-server)
+const API_URL = import.meta.env.VITE_API_URL || 'http://63.35.158.163:3000';
 
 export const api = axios.create({
     baseURL: API_URL,

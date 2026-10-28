@@ -37,8 +37,19 @@ const envSchema = z.object({
     // Monitoring (optional)
     SLACK_WEBHOOK_URL: z.string().optional(),
 
+    // Escalation (optional — for CRITICAL alerts)
+    PAGERDUTY_WEBHOOK_URL: z.string().url().optional(),
+    PAGERDUTY_ROUTING_KEY: z.string().optional(),
+
     // Auth (Epic 1)
     JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+
+    // Admin Dashboard
+    ADMIN_API_KEY: z.string().min(16, 'ADMIN_API_KEY must be at least 16 characters').optional(),
+    ADMIN_DASHBOARD_ENABLED: z.string().transform((v) => v === 'true').default('false'),
+
+    // CORS
+    FRONTEND_URL: z.string().url().optional(),
 });
 
 /**

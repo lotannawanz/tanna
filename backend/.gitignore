@@ -9,6 +9,11 @@ dist/
 .env.local
 .env.staging
 .env.production
+.env.staging.template
+
+# SSH keys
+*.pem
+*.key
 
 # IDE
 .vscode/
@@ -22,6 +27,25 @@ Thumbs.db
 *.log
 logs/
 
+# Archives
+*.tar.gz
+
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Infrastructure artifacts
+*-id.txt
+*-ip.txt
+*-url.txt
+*-status.txt
+*-result.txt
+*-details.txt
+*-rules.txt
+*-ssh.txt
+
+# Debug artifacts
+debug-*.txt
+remote_debug_*.txt
+test-*.json
+test_*.sh

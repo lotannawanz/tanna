@@ -239,7 +239,7 @@ async function getPaymentStatusHandler(
     try {
         // Use service to lookup payment with full order context
         const { getPaymentByReference } = await import('../services/payment.service.js');
-        const payment = await getPaymentByReference(prisma, reference);
+        let payment = await getPaymentByReference(prisma, reference);
 
         if (!payment) {
             return reply.status(404).send({
@@ -248,11 +248,79 @@ async function getPaymentStatusHandler(
             });
         }
 
+        // FALLBACK: If payment is still PENDING and was created > 10s ago,
+        // proactively verify with Paystack API (in case webhook didn't arrive)
+        if (payment.status === 'PENDING') {
+            const ageMs = Date.now() - new Date(payment.createdAt).getTime();
+            if (ageMs > 10_000) {
+                logger.info({
+                    reference,
+                    paymentId: payment.id,
+                    ageMs,
+                }, 'Payment still PENDING - attempting proactive Paystack verification');
+
+                try {
+                    const { verifyPaystackTransaction } = await import('../services/paystack.js');
+                    const paystackRef = payment.paystackRef || reference;
+                    const verifyResult = await verifyPaystackTransaction(paystackRef);
+
+                    if (verifyResult && verifyResult.status === 'success') {
+                        logger.info({
+                            reference,
+                            paystackStatus: verifyResult.status,
+                        }, 'Paystack confirms payment successful - updating DB');
+
+
+                        // Confirm payment directly via Prisma
+                        await prisma.payment.update({
+                            where: { id: payment.id },
+                            data: {
+                                status: 'CONFIRMED',
+                                verifiedAt: new Date(),
+                            },
+                        });
+
+                        // Confirm linked order if exists
+                        if (payment.order) {
+                            const { confirmOrder } = await import('../services/order.service.js');
+                            try {
+                                await confirmOrder(prisma, payment.order.id);
+                            } catch (orderErr) {
+                                // Order may already be confirmed (idempotent)
+                                logger.warn({
+                                    orderId: payment.order.id,
+                                    error: orderErr instanceof Error ? orderErr.message : 'Unknown',
+                                }, 'Order confirmation via fallback failed (may be idempotent)');
+                            }
+                        }
+
+                        // Re-fetch updated payment
+                        payment = await getPaymentByReference(prisma, reference);
+                        if (!payment) {
+                            return reply.status(404).send({
+                                success: false,
+                                error: 'Payment not found after update',
+                            });
+                        }
+                    }
+                } catch (verifyErr) {
+                    // Non-blocking: if verification fails, just return current state
+                    logger.warn({
+                        reference,
+                        error: verifyErr instanceof Error ? verifyErr.message : 'Unknown',
+                    }, 'Proactive Paystack verification failed - returning current state');
+                }
+            }
+        }
+
+        // At this point, payment is guaranteed non-null (early returned above if null)
+        const currentPayment = payment!;
+
         // Fetch store details if order exists
         let store: { name: string; slug: string } | null = null;
-        if (payment?.order?.vendorId) {
+        if (currentPayment?.order?.vendorId) {
             const storeRecord = await prisma.store.findUnique({
-                where: { vendorId: payment.order.vendorId },
+                where: { vendorId: currentPayment.order.vendorId },
                 select: { name: true, slug: true },
             });
             if (storeRecord) {
@@ -268,9 +336,9 @@ async function getPaymentStatusHandler(
             unitPriceKobo: number;
         }> = [];
 
-        if (payment.order) {
+        if (currentPayment.order) {
             const orderItems = await prisma.orderItem.findMany({
-                where: { orderId: payment.order.id },
+                where: { orderId: currentPayment.order.id },
                 select: {
                     productName: true,
                     unitPriceKobo: true,
@@ -289,7 +357,7 @@ async function getPaymentStatusHandler(
 
         // Mask buyer phone for privacy (show last 4 digits)
         // Using type assertion since TypeScript can't infer dynamic import return types
-        const orderData = payment.order as {
+        const orderData = currentPayment.order as {
             id: string;
             vendorId: string;
             status: string;
@@ -306,12 +374,12 @@ async function getPaymentStatusHandler(
         return reply.status(200).send({
             success: true,
             payment: {
-                id: payment.id,
-                status: payment.status,
-                amount: payment.amountKobo,
-                currency: payment.currency,
-                createdAt: payment.createdAt,
-                verifiedAt: payment.verifiedAt,
+                id: currentPayment.id,
+                status: currentPayment.status,
+                amount: currentPayment.amountKobo,
+                currency: currentPayment.currency,
+                createdAt: currentPayment.createdAt,
+                verifiedAt: currentPayment.verifiedAt,
             },
             order: orderData ? {
                 id: orderData.id,

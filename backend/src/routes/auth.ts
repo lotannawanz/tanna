@@ -137,11 +137,17 @@ async function loginHandler(
 // ===================
 
 export async function authRoutes(fastify: FastifyInstance) {
-    // Vendor signup
-    fastify.post('/api/auth/signup', signupHandler);
+    // Vendor signup — strict limit to prevent mass account creation
+    fastify.post('/api/auth/signup', {
+        config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
+        handler: signupHandler,
+    } as any);
 
-    // Vendor login
-    fastify.post('/api/auth/login', loginHandler);
+    // Vendor login — strict limit to prevent brute-force
+    fastify.post('/api/auth/login', {
+        config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+        handler: loginHandler,
+    } as any);
 
-    logger.debug('Auth routes registered');
+    logger.debug('Auth routes registered with rate limits');
 }

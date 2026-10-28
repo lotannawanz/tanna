@@ -48,17 +48,17 @@ export function VendorDashboard() {
             try {
                 // Fetch overview and orders in parallel
                 const [overviewRes, ordersRes] = await Promise.all([
-                    api.get('/api/vendor/store/overview').catch(e => {
-                        console.error("Failed to fetch overview", e);
-                        return { data: null };
-                    }),
-                    api.get(`/api/vendors/${effectiveVendorId}/orders?limit=50`)
+                    api.get('/api/vendor/store/overview'),
+                    api.get('/api/orders?limit=50').catch(e => {
+                        console.error("Failed to fetch orders", e);
+                        return { data: { orders: [] } };
+                    })
                 ]);
 
                 if (overviewRes.data) {
                     setOverview(overviewRes.data);
                 }
-                setOrders(ordersRes.data.orders);
+                setOrders(ordersRes.data?.orders || []);
             } catch (err: any) {
                 setError(err.response?.data?.message || err.message || 'Failed to fetch dashboard data');
             } finally {
@@ -80,12 +80,12 @@ export function VendorDashboard() {
     const ordersOlder = orders.filter(o => new Date(o.createdAt) < today);
 
     const hasOrders = orders.length > 0;
-    const hasProducts = overview?.stats.productCount && overview.stats.productCount > 0;
+    const hasProducts = overview?.stats?.productCount && overview.stats.productCount > 0;
 
     return (
         <div>
             {/* Store Overview Section */}
-            {overview && (
+            {overview && overview.store && overview.stats && (
                 <div style={{ marginBottom: 'var(--space-8)' }}>
                     <div style={{
                         display: 'flex',
@@ -300,7 +300,6 @@ function OrderCard({ order, vendorId }: { order: OrderSummary, vendorId: string 
                 textDecoration: 'none',
                 color: 'inherit',
                 backgroundColor: 'white',
-                transition: 'box-shadow 0.2s',
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>

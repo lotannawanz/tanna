@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
+import { DemoPage } from './pages/public/DemoPage';
 import { CreateStorePage } from './pages/vendor/CreateStorePage';
 import { PublicProductPage } from './pages/public/PublicProductPage';
 import { ProductListPage } from './pages/vendor/ProductListPage';
@@ -45,7 +46,7 @@ function Home() {
         Tanna
       </h1>
       <p style={{ color: 'var(--text-secondary)', marginBottom: 'var(--space-6)' }}>
-        Payment clarity for WhatsApp vendors.
+        Payment clarity for everyday commerce.
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -64,14 +65,27 @@ function Home() {
           Get Started
         </a>
         <a
-          href="/login"
+          href="/demo"
           style={{
             display: 'block',
             padding: 'var(--space-3)',
             border: '1px solid var(--border-subtle)',
-            borderRadius: '6px',
+            borderRadius: '4px',
             textDecoration: 'none',
-            color: 'var(--text-primary)'
+            color: 'var(--text-primary)',
+            fontWeight: 500
+          }}
+        >
+          See Example Flow
+        </a>
+        <a
+          href="/login"
+          style={{
+            display: 'block',
+            padding: 'var(--space-2)',
+            textDecoration: 'none',
+            color: 'var(--text-secondary)',
+            fontSize: '0.85rem'
           }}
         >
           I already have an account
@@ -93,6 +107,8 @@ function App() {
               <PaymentVerify />
             </Layout>
           } />
+
+          <Route path="/demo" element={<DemoPage />} />
 
           {/* Public Product Page (Epic 3) */}
           <Route path="/store/:storeSlug/product/:productSlug" element={<PublicProductPage />} />

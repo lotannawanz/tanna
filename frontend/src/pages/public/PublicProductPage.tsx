@@ -100,8 +100,8 @@ export function PublicProductPage() {
             <header style={{
                 marginBottom: 'var(--space-6)',
                 textAlign: 'center',
-                borderBottom: '1px solid var(--border-subtle)',
-                paddingBottom: 'var(--space-3)'
+                borderBottom: '1px dashed var(--border-subtle)',
+                paddingBottom: 'var(--space-4)'
             }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                     {data.store.name}
@@ -110,24 +110,28 @@ export function PublicProductPage() {
 
             {/* Product Details */}
             <main style={{ flex: 1 }}>
-                <div style={{ marginBottom: 'var(--space-4)' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 'var(--space-2)' }}>
+                <div style={{ marginBottom: 'var(--space-6)', textAlign: 'center' }}>
+                    <h1 style={{ fontSize: '1.25rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
                         {data.product.name}
                     </h1>
-                    <p style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div className="tabular-nums" style={{ fontSize: '3rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>
                         {formattedPrice}
-                    </p>
+                    </div>
                 </div>
 
                 {data.product.description && (
                     <div style={{
                         color: 'var(--text-secondary)',
                         lineHeight: 1.6,
-                        marginBottom: 'var(--space-8)'
+                        marginBottom: 'var(--space-6)',
+                        textAlign: 'center',
+                        fontSize: '0.95rem'
                     }}>
                         {data.product.description}
                     </div>
                 )}
+
+                <div style={{ borderTop: '1px dashed var(--border-subtle)', margin: '2rem 0' }}></div>
 
                 {/* Checkout Section */}
                 {!showCheckout ? (
@@ -139,10 +143,9 @@ export function PublicProductPage() {
                             backgroundColor: 'var(--color-black)',
                             color: 'white',
                             border: 'none',
-                            borderRadius: '8px',
+                            borderRadius: '4px',
                             fontSize: '1.1rem',
-                            fontWeight: 600,
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                            fontWeight: 600
                         }}
                     >
                         Buy Now
@@ -152,9 +155,8 @@ export function PublicProductPage() {
                         marginTop: 'var(--space-4)',
                         padding: 'var(--space-4)',
                         backgroundColor: 'var(--bg-surface)',
-                        borderRadius: '12px',
-                        border: '1px solid var(--border-subtle)',
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+                        borderRadius: '4px',
+                        border: '1px solid var(--border-subtle)'
                     }}>
                         <h3 style={{ marginBottom: 'var(--space-4)', fontSize: '1.1rem' }}>Enter Details</h3>
                         <BuyerInfoForm
@@ -183,11 +185,15 @@ export function PublicProductPage() {
 
             <footer style={{
                 marginTop: 'var(--space-8)',
-                textAlign: 'center',
-                fontSize: '0.75rem',
-                color: 'var(--text-secondary)'
+                textAlign: 'center'
             }}>
-                Powered by Tanna
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--text-primary)', marginBottom: '0.5rem', fontSize: '0.8rem' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    <span>Secured via Paystack / CBN Licensed Partners</span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    Verified by <strong>Tanna</strong>. Immutable record.
+                </div>
             </footer>
         </div>
     );

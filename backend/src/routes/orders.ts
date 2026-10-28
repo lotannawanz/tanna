@@ -8,7 +8,7 @@ import {
     getOrderById,
     fulfillOrder,
 } from '../services/order.service.js';
-import { authMiddleware, ownershipMiddleware } from '../middleware/auth.middleware.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const logger = createLogger('orders-route');
 
@@ -16,12 +16,7 @@ const logger = createLogger('orders-route');
 // REQUEST SCHEMAS
 // ===================
 
-const vendorIdParamSchema = z.object({
-    vendorId: z.string().uuid('Invalid vendor ID'),
-});
-
 const orderIdParamSchema = z.object({
-    vendorId: z.string().uuid('Invalid vendor ID'),
     orderId: z.string().uuid('Invalid order ID'),
 });
 
@@ -36,28 +31,17 @@ const listOrdersQuerySchema = z.object({
 // ===================
 
 /**
- * GET /vendors/:vendorId/orders
+ * GET /api/orders
  * 
- * List orders for a vendor with optional filters
+ * List orders for the authenticated vendor (derived from JWT).
  */
 async function listVendorOrdersHandler(
     request: FastifyRequest<{
-        Params: z.infer<typeof vendorIdParamSchema>;
         Querystring: z.infer<typeof listOrdersQuerySchema>;
     }>,
     reply: FastifyReply
 ) {
     try {
-        // Validate params
-        const paramsResult = vendorIdParamSchema.safeParse(request.params);
-        if (!paramsResult.success) {
-            return reply.status(400).send({
-                success: false,
-                error: 'Invalid vendor ID',
-                details: paramsResult.error.errors,
-            });
-        }
-
         // Validate query
         const queryResult = listOrdersQuerySchema.safeParse(request.query);
         if (!queryResult.success) {
@@ -68,13 +52,10 @@ async function listVendorOrdersHandler(
             });
         }
 
-        const { vendorId } = paramsResult.data;
+        const vendorId = request.vendorId!;
         const { status, limit, offset } = queryResult.data;
 
         const prisma = getPrismaClient();
-
-        // TODO: In production, verify caller is authorized for this vendorId
-        // For now, we trust the vendorId from the URL
 
         const { orders, total } = await getVendorOrders(prisma, vendorId, {
             status,
@@ -126,9 +107,9 @@ async function listVendorOrdersHandler(
 }
 
 /**
- * GET /vendors/:vendorId/orders/:orderId
+ * GET /api/orders/:orderId
  * 
- * Get detailed order information
+ * Get detailed order information for the authenticated vendor.
  */
 async function getVendorOrderHandler(
     request: FastifyRequest<{
@@ -147,7 +128,8 @@ async function getVendorOrderHandler(
             });
         }
 
-        const { vendorId, orderId } = paramsResult.data;
+        const vendorId = request.vendorId!;
+        const { orderId } = paramsResult.data;
         const prisma = getPrismaClient();
 
         const order = await getOrderById(prisma, orderId);
@@ -159,8 +141,14 @@ async function getVendorOrderHandler(
             });
         }
 
-        // Security: Verify vendor owns this order
+        // Security: Verify vendor owns this order via JWT identity
         if (order.vendorId !== vendorId) {
+            logger.warn({
+                requestedOrderId: orderId,
+                orderVendorId: order.vendorId,
+                tokenVendorId: vendorId,
+            }, 'Cross-vendor order access attempt blocked');
+
             return reply.status(403).send({
                 success: false,
                 error: 'Forbidden: Order does not belong to this vendor',
@@ -210,9 +198,9 @@ async function getVendorOrderHandler(
 }
 
 /**
- * POST /vendors/:vendorId/orders/:orderId/fulfill
+ * POST /api/orders/:orderId/fulfill
  * 
- * Mark an order as fulfilled
+ * Mark an order as fulfilled (authenticated vendor only).
  */
 async function fulfillOrderHandler(
     request: FastifyRequest<{
@@ -231,7 +219,8 @@ async function fulfillOrderHandler(
             });
         }
 
-        const { vendorId, orderId } = paramsResult.data;
+        const vendorId = request.vendorId!;
+        const { orderId } = paramsResult.data;
         const prisma = getPrismaClient();
 
         await fulfillOrder(prisma, orderId, vendorId);
@@ -286,18 +275,17 @@ async function fulfillOrderHandler(
 // ===================
 
 export async function ordersRoutes(fastify: FastifyInstance) {
-    // Apply auth and ownership middleware to all vendor routes
+    // Apply auth middleware — vendorId is derived from JWT, never from URL
     fastify.addHook('onRequest', authMiddleware);
-    fastify.addHook('onRequest', ownershipMiddleware);
 
-    // List vendor orders
-    fastify.get('/api/vendors/:vendorId/orders', listVendorOrdersHandler);
+    // List vendor orders (JWT-scoped)
+    fastify.get('/api/orders', listVendorOrdersHandler);
 
-    // Get vendor order detail
-    fastify.get('/api/vendors/:vendorId/orders/:orderId', getVendorOrderHandler);
+    // Get vendor order detail (JWT-scoped)
+    fastify.get('/api/orders/:orderId', getVendorOrderHandler);
 
-    // Mark order as fulfilled
-    fastify.post('/api/vendors/:vendorId/orders/:orderId/fulfill', fulfillOrderHandler);
+    // Mark order as fulfilled (JWT-scoped)
+    fastify.post('/api/orders/:orderId/fulfill', fulfillOrderHandler);
 
-    logger.debug('Orders routes registered with auth middleware');
+    logger.debug('Orders routes registered (JWT-scoped, no URL vendorId)');
 }

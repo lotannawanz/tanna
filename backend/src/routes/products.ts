@@ -135,7 +135,10 @@ async function listProductsHandler(
     try {
         const storeId = request.storeId;
 
+        logger.info({ storeId, vendorId: request.vendorId }, 'listProductsHandler called');
+
         if (!storeId) {
+            logger.warn({ vendorId: request.vendorId }, 'listProductsHandler: No store found for vendor');
             return reply.status(200).send({
                 success: true,
                 products: [],

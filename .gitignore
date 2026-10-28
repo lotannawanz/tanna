@@ -1,12 +1,58 @@
-build_order.md
-product_manifest.md
+# Dependencies
 node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment files (NEVER commit secrets)
 .env
 .env.*
 !.env.example
-dist/
-build/
-*.log
+
+# SSH keys and certificates
+*.pem
+*.key
+*.crt
+
+# OS files
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
 .vscode/
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+*.log
+logs/
+
+# Archives / deploy artifacts
+*.tar.gz
+*.zip
+
+# Infrastructure artifacts (AWS, etc.)
+*-id.txt
+*-ip.txt
+*-url.txt
+*-status.txt
+*-result.txt
+*-details.txt
+*-rules.txt
+*-ssh.txt
+
+# Debug / test artifacts
+debug-*.txt
+remote_debug_*.txt
+test-*.json
+test_*.sh
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal

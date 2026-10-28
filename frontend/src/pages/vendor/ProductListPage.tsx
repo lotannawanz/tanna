@@ -31,8 +31,10 @@ export function ProductListPage() {
         const fetchProducts = async () => {
             try {
                 const response = await api.get('/api/products');
-                setProducts(response.data.products);
+                setProducts(response.data?.products || []);
             } catch (err: any) {
+                console.error("Failed to fetch products", err);
+                setProducts([]);
                 setError(err.response?.data?.message || err.message || 'Failed to fetch products');
             } finally {
                 setLoading(false);

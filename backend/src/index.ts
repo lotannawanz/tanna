@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
-import { env } from './config/env.js';
+import rateLimit from '@fastify/rate-limit';
+import crypto from 'crypto';
+import { env, isLocal } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { healthRoutes } from './routes/health.js';
 import { paymentsRoutes } from './routes/payments.js';
@@ -11,7 +13,9 @@ import { storeRoutes } from './routes/store.js';
 import { publicRoutes } from './routes/public.routes.js';
 import { productsRoutes } from './routes/products.js';
 import { storeOverviewRoutes } from './routes/store-overview.js';
+import { adminRoutes } from './routes/admin.routes.js';
 import { disconnectPrisma, getPrismaClient } from './lib/database.js';
+import { recordRequest } from './lib/api-metrics.js';
 
 /**
  * Tanna Backend Server
@@ -26,6 +30,8 @@ import { disconnectPrisma, getPrismaClient } from './lib/database.js';
  */
 async function main() {
     const fastify = Fastify({
+        // Generate a unique request ID for every incoming request
+        genReqId: () => `req-${crypto.randomBytes(8).toString('hex')}`,
         logger: {
             level: env.NODE_ENV === 'local' ? 'debug' : 'info',
             transport: env.NODE_ENV === 'local'
@@ -41,19 +47,55 @@ async function main() {
         },
     });
 
+    // -----------------------------------------------
+    // Request lifecycle hooks
+    // -----------------------------------------------
+
+    // Structured access log on every response + feed API metrics
+    fastify.addHook('onResponse', (request, reply, done) => {
+        recordRequest(reply.statusCode);
+        request.log.info({
+            requestId: request.id,
+            method: request.method,
+            url: request.url,
+            statusCode: reply.statusCode,
+            responseTimeMs: reply.elapsedTime,
+        }, 'request completed');
+        done();
+    });
+
+    // Track 5xx errors for alerting
+    fastify.addHook('onError', (request, reply, error, done) => {
+        request.log.error({
+            requestId: request.id,
+            method: request.method,
+            url: request.url,
+            statusCode: reply.statusCode,
+            errorMessage: error.message,
+        }, '5xx error occurred');
+        done();
+    });
+
     // Initialize database connection
     const prisma = getPrismaClient();
 
     // Make prisma available to routes
     fastify.decorate('prisma', prisma);
 
-    // Register CORS for frontend access
+    // Register CORS — strict in staging/production, permissive in local dev
     await fastify.register(cors, {
-        origin: true, // Allow all origins for tunnel testing
+        origin: isLocal
+            ? true
+            : (env.FRONTEND_URL || false),
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     });
 
+    // Global rate limiting — baseline protection
+    await fastify.register(rateLimit, {
+        max: 100,
+        timeWindow: '1 minute',
+    });
 
 
     // Register routes
@@ -66,6 +108,7 @@ async function main() {
     await fastify.register(productsRoutes);  // Epic 2: Products
     await fastify.register(storeOverviewRoutes);  // Epic 8: Store overview
     await fastify.register(publicRoutes);  // Epic 3: Public product pages & checkout
+    await fastify.register(adminRoutes);  // Internal admin dashboard
 
 
 

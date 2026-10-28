@@ -17,6 +17,7 @@ export async function healthRoutes(fastify: FastifyInstance) {
             timestamp: new Date().toISOString(),
             services: {
                 database: dbHealthy ? 'connected' : 'disconnected',
+                secretDebug: env.JWT_SECRET.substring(0, 5) + '...',
             },
         };
     });
