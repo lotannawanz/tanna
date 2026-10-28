@@ -56,3 +56,7 @@ test_*.sh
 # Prisma
 prisma/*.db
 prisma/*.db-journal
+
+# Internal / draft planning
+*roadmap*.md
+build_order.md

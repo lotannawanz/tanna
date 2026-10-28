@@ -43,7 +43,6 @@ These vendors don't want to "learn software." They want to know when they've bee
 | Document | Description |
 |---|---|
 | [Product Brief](docs/PRODUCT_BRIEF.md) | Full product manifesto — ICP, thesis, MVP scope, system primitives, and monetization strategy |
-| [Engineering Roadmap](docs/ENGINEERING_ROADMAP.md) | Prioritized build order with 11 epics, acceptance criteria, and explicit constraints |
 | [System Architecture](docs/ARCHITECTURE.md) | Technical architecture, data flow diagrams, and system design decisions |
 | [Operational Runbook](backend/docs/operational-runbook.md) | Backup strategy, disaster recovery, WhatsApp fallback, dispute handling |
 
@@ -67,7 +66,6 @@ These vendors don't want to "learn software." They want to know when they've bee
 Tanna/
 ├── docs/                          # Product & architecture documentation
 │   ├── PRODUCT_BRIEF.md           # Product manifesto
-│   ├── ENGINEERING_ROADMAP.md     # Prioritized build epics
 │   └── ARCHITECTURE.md            # System architecture
 │
 ├── backend/                       # Node.js/Fastify API
